@@ -23,7 +23,8 @@ function App() {
     const [orderAnalysisError, setOrderAnalysisError] = useState("");
 
     const orderRequestId = useRef(0);
-    
+    const aiRequestId = useRef(0);
+
     useEffect(() => {
         aiRequestId.current += 1;
 
@@ -40,11 +41,15 @@ function App() {
     const [loadingImpact, setLoadingImpact] = useState(false);
     const [error, setError] = useState("");
 
-    const aiRequestId = useRef(0);
-
     const [mitigation, setMitigation] = useState(null);
     const [loadingMitigation, setLoadingMitigation] = useState(false);
     const [mitigationError, setMitigationError] = useState("");
+
+    // RAG knowledge-question state
+    const [knowledgeQuestion, setKnowledgeQuestion] = useState("");
+    const [knowledgeResult, setKnowledgeResult] = useState(null);
+    const [loadingKnowledge, setLoadingKnowledge] = useState(false);
+    const [knowledgeError, setKnowledgeError] = useState("");
 
     // Load all disruptions once.
     useEffect(() => {
@@ -199,7 +204,7 @@ function App() {
         });
     };
 
-    // Sidebar navigation scrolls to the matching workspace section.
+    // Navigate to the matching section inside the independently scrollable workspace.
     function handleNavigate(section) {
         const sectionIds = {
             "Control Tower": "control-tower",
@@ -212,14 +217,22 @@ function App() {
         };
 
         setActiveSection(section);
-        const target = document.getElementById(sectionIds[section]);
-        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+        // A few operational sections are rendered only after a disruption is loaded.
+        // Retry after the current render so navigation remains reliable during loading.
+        const targetId = sectionIds[section];
+        requestAnimationFrame(() => {
+            const target = document.getElementById(targetId);
+            if (target) {
+                target.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        });
     }
 
     // Initial loading screen.
     if (loadingList) {
         return (
-            <div className="min-h-screen bg-slate-950 p-10 text-white">
+            <div className="min-h-screen bg-black/40 p-10 text-white">
                 Loading incidents...
             </div>
         );
@@ -309,7 +322,43 @@ function App() {
         }
     }
 
-        function clearOrderInvestigation() {
+        async function handleKnowledgeQuestion(event) {
+        event.preventDefault();
+
+        const question = knowledgeQuestion.trim();
+        if (!question) {
+            setKnowledgeError("Please enter a question.");
+            return;
+        }
+
+        setLoadingKnowledge(true);
+        setKnowledgeError("");
+        setKnowledgeResult(null);
+
+        try {
+            const response = await fetch("http://localhost:5000/api/knowledge/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ question }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || "Knowledge question failed.");
+            }
+
+            setKnowledgeResult(result.data);
+        } catch (err) {
+            setKnowledgeError(
+                err.message || "Unable to query the knowledge base right now."
+            );
+        } finally {
+            setLoadingKnowledge(false);
+        }
+    }
+
+    function clearOrderInvestigation() {
         orderRequestId.current += 1;
         setSelectedOrder(null);
         setOrderAnalysis(null);
@@ -318,28 +367,28 @@ function App() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 md:flex">
+        <div className="min-h-screen bg-[#09090b] text-zinc-100 selection:bg-red-500/30 md:flex md:h-screen md:overflow-hidden">
             <Sidebar activeSection={activeSection} onNavigate={handleNavigate} />
 
-            <main className="min-w-0 flex-1 p-5 md:p-8">
+            <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-9 md:h-screen md:overflow-y-auto">
                 {/* Page header */}
-                <header className="mb-8">
-                    <p className="text-sm text-cyan-400">
-                        SUPPLY CHAIN / INCIDENTS
+                <header className="mb-8 border-b border-white/10 pb-7">
+                    <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-red-400">
+                        <span className="h-2 w-2 rounded-full bg-red-500" /> SUPPLYCHAINOS / OPERATIONS
                     </p>
 
-                    <h1 className="mt-2 text-3xl font-bold">
+                    <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
                         Incident Intelligence
                     </h1>
 
-                    <p className="mt-2 text-sm text-slate-400">
+                    <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-400">
                         Investigate disruptions, assess operational impact,
                         and compare potential recovery options.
                     </p>
                 </header>
 
                 {/* Disruption registry */}
-                <div id="control-tower" className="scroll-mt-6">
+                <div id="control-tower" className="scroll-mt-8">
                 <SectionCard
                     title="Disruption Registry"
                     subtitle={`${incidents.length} incidents available`}
@@ -358,8 +407,8 @@ function App() {
                                     }
                                     className={`rounded-xl border p-4 text-left transition ${
                                         selectedId === String(incident.id)
-                                            ? "border-cyan-400 bg-cyan-400/10"
-                                            : "border-slate-700 bg-slate-950 hover:border-slate-500"
+                                            ? "border-red-500 bg-red-500/10"
+                                            : "border-slate-700 bg-black/40 hover:border-slate-500"
                                     }`}
                                 >
                                     <div className="flex items-start justify-between gap-3">
@@ -410,8 +459,8 @@ function App() {
                 )}
 
                 {loadingImpact && (
-                    <div className="mt-4 flex items-center gap-3 text-sm text-cyan-300">
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-300/30 border-t-cyan-300" />
+                    <div className="mt-4 flex items-center gap-3 text-sm text-red-300">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-300/30 border-t-red-400" />
                         Updating incident analysis...
                     </div>
                 )}
@@ -421,14 +470,14 @@ function App() {
                     <div
                         id="disruption-workspace"
                         key={selectedId}
-                        className="animate-fade-in-up"
+                        className="scroll-mt-8 animate-fade-in-up"
                         aria-busy={loadingImpact}
                     >
                     <>
                     
                 
                         {/* Incident overview */}
-                        <section className="my-6 rounded-2xl border border-red-500/20 bg-gradient-to-r from-red-500/10 to-slate-900 p-6">
+                        <section className="my-6 scroll-mt-6 rounded-2xl border border-red-500/20 bg-gradient-to-br from-red-500/[0.08] via-zinc-950 to-zinc-900/70 p-5 shadow-xl shadow-black/20 sm:p-6">
                             <p className="text-sm text-slate-400">
                                 ORIGIN SUPPLIER
                             </p>
@@ -461,7 +510,7 @@ function App() {
                                         AI Confidence
                                     </p>
 
-                                    <p className="mt-1 text-2xl font-bold text-cyan-300">
+                                    <p className="mt-1 text-2xl font-bold text-red-300">
                                         {(
                                             Number(
                                                 data.disruption.ai_confidence
@@ -490,7 +539,7 @@ function App() {
                                         {data.disruption.expected_resolution_date
                                             ? new Date(
                                                   data.disruption.expected_resolution_date
-                                              ).toLocaleDateString("en-IN")
+                                              ).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
                                             : "Unknown"}
                                     </p>
                                 </div>
@@ -556,7 +605,7 @@ function App() {
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left text-sm">
                                             <thead className="text-slate-400">
-                                                <tr className="border-b border-slate-800">
+                                                <tr className="border-b border-white/10">
                                                     <th className="pb-3 pr-4">
                                                         Factory
                                                     </th>
@@ -580,7 +629,7 @@ function App() {
                                                     (factory, index) => (
                                                         <tr
                                                             key={`${factory.name}-${factory.product_id}-${index}`}
-                                                            className="border-b border-slate-800/70 last:border-0"
+                                                            className="border-b border-white/10/70 last:border-0"
                                                         >
                                                             <td className="py-4 pr-4 font-medium">
                                                                 {factory.name}
@@ -600,7 +649,7 @@ function App() {
                                                                 )}
                                                             </td>
 
-                                                            <td className="py-4 text-amber-300">
+                                                            <td className="py-4 text-red-300">
                                                                 {formatNumber(
                                                                     factory.potential_production_loss
                                                                 )}
@@ -629,7 +678,7 @@ function App() {
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left text-sm">
                                             <thead className="text-slate-400">
-                                                <tr className="border-b border-slate-800">
+                                                <tr className="border-b border-white/10">
                                                     <th className="pb-3 pr-4">
                                                         Order
                                                     </th>
@@ -655,7 +704,7 @@ function App() {
                                                 {data.orders.map((order) => (
                                                     <tr
                                                         key={order.id}
-                                                        className="border-b border-slate-800/70 last:border-0"
+                                                        className="border-b border-white/10/70 last:border-0"
                                                     >
                                                         <td className="py-4 pr-4">
                                                             #{order.id}
@@ -671,7 +720,7 @@ function App() {
                                                             )}
                                                         </td>
 
-                                                        <td className="py-4 pr-4 text-emerald-300">
+                                                        <td className="py-4 pr-4 text-white">
                                                             {formatNumber(
                                                                 order.allocated
                                                             )}
@@ -688,7 +737,7 @@ function App() {
                                                                 className={
                                                                     order.affected
                                                                         ? "text-red-300"
-                                                                        : "text-emerald-300"
+                                                                        : "text-white"
                                                                 }
                                                             >
                                                                 {order.affected
@@ -719,7 +768,7 @@ function App() {
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left text-sm">
                                             <thead className="text-slate-400">
-                                                <tr className="border-b border-slate-800">
+                                                <tr className="border-b border-white/10">
                                                     <th className="pb-3 pr-4">
                                                         Supplier
                                                     </th>
@@ -743,7 +792,7 @@ function App() {
                                                     (shipment) => (
                                                         <tr
                                                             key={shipment.id}
-                                                            className="border-b border-slate-800/70 last:border-0"
+                                                            className="border-b border-white/10/70 last:border-0"
                                                         >
                                                             <td className="py-4 pr-4">
                                                                 {shipment.supplier}
@@ -774,7 +823,7 @@ function App() {
                                                                     className={
                                                                         shipment.at_risk
                                                                             ? "text-red-300"
-                                                                            : "text-emerald-300"
+                                                                            : "text-white"
                                                                     }
                                                                 >
                                                                     {shipment.at_risk
@@ -808,7 +857,7 @@ function App() {
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left text-sm">
                                             <thead className="text-slate-400">
-                                                <tr className="border-b border-slate-800">
+                                                <tr className="border-b border-white/10">
                                                     <th className="pb-3 pr-4">
                                                         Supplier
                                                     </th>
@@ -837,7 +886,7 @@ function App() {
                                                             key={
                                                                 supplier.supplier_id
                                                             }
-                                                            className="border-b border-slate-800/70 last:border-0"
+                                                            className="border-b border-white/10/70 last:border-0"
                                                         >
                                                             <td className="py-4 pr-4 font-medium text-white">
                                                                 {supplier.supplier}
@@ -887,7 +936,7 @@ function App() {
                                 subtitle="Compare potential recovery options using stored operational data"
                             >
                                 {loadingMitigation && (
-                                    <p className="text-sm text-cyan-300">
+                                    <p className="text-sm text-red-300">
                                         Evaluating mitigation options...
                                     </p>
                                 )}
@@ -902,12 +951,12 @@ function App() {
                                     <>
                                         {/* Baseline metrics */}
                                         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                                            <div className="rounded-xl bg-slate-950 p-4">
+                                            <div className="rounded-xl bg-black/40 p-4">
                                                 <p className="text-sm text-slate-400">
                                                     Inventory coverage
                                                 </p>
 
-                                                <p className="mt-2 text-2xl font-bold text-cyan-300">
+                                                <p className="mt-2 text-2xl font-bold text-red-300">
                                                     {formatDays(
                                                         mitigation.baseline
                                                             ?.coverageDays
@@ -915,7 +964,7 @@ function App() {
                                                 </p>
                                             </div>
 
-                                            <div className="rounded-xl bg-slate-950 p-4">
+                                            <div className="rounded-xl bg-black/40 p-4">
                                                 <p className="text-sm text-slate-400">
                                                     Potential supply gap
                                                 </p>
@@ -928,7 +977,7 @@ function App() {
                                                 </p>
                                             </div>
 
-                                            <div className="rounded-xl bg-slate-950 p-4">
+                                            <div className="rounded-xl bg-black/40 p-4">
                                                 <p className="text-sm text-slate-400">
                                                     Original unit cost
                                                 </p>
@@ -960,7 +1009,7 @@ function App() {
                                             <div className="overflow-x-auto">
                                                 <table className="w-full text-left text-sm">
                                                     <thead className="text-slate-400">
-                                                        <tr className="border-b border-slate-800">
+                                                        <tr className="border-b border-white/10">
                                                             <th className="pb-3 pr-4">
                                                                 Supplier
                                                             </th>
@@ -989,7 +1038,7 @@ function App() {
                                                                     key={
                                                                         option.supplierId
                                                                     }
-                                                                    className="border-b border-slate-800/70 last:border-0"
+                                                                    className="border-b border-white/10/70 last:border-0"
                                                                 >
                                                                     <td className="py-4 pr-4 font-medium text-white">
                                                                         {
@@ -1010,7 +1059,7 @@ function App() {
                                                                         )}
                                                                     </td>
 
-                                                                    <td className="py-4 pr-4 text-cyan-300">
+                                                                    <td className="py-4 pr-4 text-red-300">
                                                                         {formatCurrency(
                                                                             option.estimatedProcurementCost
                                                                         )}
@@ -1027,10 +1076,10 @@ function App() {
                                                                         <span
                                                                             className={
                                                                                 option.timingAssessment === "ARRIVES_BEFORE_STOCKOUT"
-                                                                                    ? "text-emerald-300"
+                                                                                    ? "text-white"
                                                                                     : option.timingAssessment === "UNKNOWN_INVENTORY_COVERAGE"
                                                                                     ? "text-slate-400"
-                                                                                    : "text-amber-300"
+                                                                                    : "text-red-300"
                                                                             }
                                                                         >
                                                                             {option.timingAssessment === "ARRIVES_BEFORE_STOCKOUT"
@@ -1065,7 +1114,7 @@ function App() {
 
                                         {/* Other recovery options */}
                                         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                                            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                                            <div className="rounded-xl border border-white/10 bg-black/40 p-4">
                                                 <h4 className="font-semibold text-white">
                                                     Wait for Original Supplier
                                                 </h4>
@@ -1080,7 +1129,7 @@ function App() {
                                                 </p>
                                             </div>
 
-                                            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                                            <div className="rounded-xl border border-white/10 bg-black/40 p-4">
                                                 <h4 className="font-semibold text-white">
                                                     Adjust Production
                                                 </h4>
@@ -1101,8 +1150,8 @@ function App() {
                                         </div>
 
                                         {/* Decision disclaimer */}
-                                        <div className="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-                                            <p className="font-semibold text-amber-200">
+                                        <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+                                            <p className="font-semibold text-red-200">
                                                 Decision support, not a confirmed
                                                 procurement plan
                                             </p>
@@ -1124,14 +1173,14 @@ function App() {
                             </SectionCard>
                         </section>
                          
-                        <div id="ai-copilot" className="mb-6 scroll-mt-6 rounded-2xl border border-indigo-400/20 bg-slate-900 p-5">
+                        <div id="ai-copilot" className="mb-6 scroll-mt-6 rounded-2xl border border-red-500/30 bg-zinc-950 p-5">
                         <h2 className="mb-3 text-xl font-bold text-white">AI Decision Copilot</h2>
                         <p className="mb-4 text-sm text-slate-400">Investigate the selected disruption using operational impact evidence.</p>
                         <button
                             onClick={handleAIInvestigation}
                             disabled={loadingAI || !selectedId}
-                            className="rounded-lg bg-blue-600 px-4 py-2 text-white
-                                    hover:bg-blue-700 disabled:cursor-not-allowed
+                            className="rounded-lg bg-red-600 px-4 py-2 text-white
+                                    hover:bg-red-500 disabled:cursor-not-allowed
                                     disabled:opacity-50"
                         >
                             {loadingAI ? "Investigating..." : "Investigate with AI"}
@@ -1144,7 +1193,7 @@ function App() {
                         )}
 
                         {aiAnalysis && (
-                            <section className="mt-5 rounded-xl border border-slate-200 p-5">
+                            <section className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] p-5">
                                 <h2 className="text-xl font-bold">
                                     AI Disruption Investigation
                                 </h2>
@@ -1220,7 +1269,7 @@ function App() {
                         </div>
                       
                         {data && (
-                            <section className="mb-5 rounded-xl border border-slate-200 p-5">
+                            <section className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-5">
                                 <h2 className="text-xl font-bold">
                                     Operational Impact Evidence
                                 </h2>
@@ -1303,9 +1352,9 @@ function App() {
                                                                     setLoadingOrderAnalysis(false);
                                                                 }
                                                             }}
-                                                            className={`border-b border-slate-800 cursor-pointer ${
+                                                            className={`border-b border-white/10 cursor-pointer ${
                                                                 selectedOrder?.id === order.id
-                                                                    ? "bg-blue-500/10"
+                                                                    ? "bg-red-500/10"
                                                                     : "hover:bg-slate-800/50"
                                                             }`}
                                                         >
@@ -1320,7 +1369,7 @@ function App() {
                                                             <td className="p-2 font-semibold text-red-400">
                                                                 {Number(order.shortage).toLocaleString("en-IN")}
                                                             </td>
-                                                            <td className="p-2 text-blue-400">
+                                                            <td className="p-2 text-red-400">
                                                                 {selectedOrder?.id === order.id
                                                                     ? "Selected"
                                                                     : "Investigate →"}
@@ -1357,8 +1406,8 @@ function App() {
                                                     type="button"
                                                     onClick={handleOrderInvestigation}
                                                     disabled={loadingOrderAnalysis}
-                                                    className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white
-                                                            hover:bg-blue-500 disabled:cursor-not-allowed
+                                                    className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-white
+                                                            hover:bg-red-500 disabled:cursor-not-allowed
                                                             disabled:opacity-60"
                                                 >
                                                     {loadingOrderAnalysis
@@ -1436,7 +1485,7 @@ function App() {
                                     is implemented.
                                 </p>
 
-                                <p className="mt-4 text-xs text-cyan-300">
+                                <p className="mt-4 text-xs text-red-300">
                                     Planned module · Not implemented yet
                                 </p>
                             </SectionCard>
@@ -1445,15 +1494,75 @@ function App() {
                         </div>
                 )}
 
-                <section id="knowledge-center" className="mt-8 scroll-mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-6">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400">Knowledge Base</p>
+                <section id="knowledge-center" className="mt-8 scroll-mt-6 rounded-2xl border border-white/10 bg-zinc-950/80 p-6">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-red-400">RAG · QDRANT + GEMINI</p>
                     <h2 className="mt-2 text-2xl font-bold text-white">Knowledge Center</h2>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                        This workspace will index supplier policies, procurement procedures, shipping documents, and incident reports for evidence-grounded AI answers. Document ingestion and RAG retrieval will be connected here next.
+                        Ask questions about indexed supplier policies and procedures. Answers are generated using retrieved document evidence, with source references shown below.
                     </p>
-                    <div className="mt-4 rounded-xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                        No documents indexed yet. This is a placeholder; no real supplier documents have been uploaded.
-                    </div>
+
+                    <form onSubmit={handleKnowledgeQuestion} className="mt-5 space-y-3">
+                        <label htmlFor="knowledge-question" className="block text-sm font-medium text-slate-200">
+                            Ask the knowledge base
+                        </label>
+                        <textarea
+                            id="knowledge-question"
+                            value={knowledgeQuestion}
+                            onChange={(event) => setKnowledgeQuestion(event.target.value)}
+                            placeholder="Example: What should we do when a critical supplier delays delivery?"
+                            rows={3}
+                            className="w-full rounded-xl border border-slate-700 bg-black/40 p-3 text-sm text-white placeholder:text-slate-500 focus:border-red-500 focus:outline-none"
+                            disabled={loadingKnowledge}
+                        />
+                        <button
+                            type="submit"
+                            disabled={loadingKnowledge || !knowledgeQuestion.trim()}
+                            className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-slate-950 transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {loadingKnowledge ? "Searching knowledge base..." : "Ask AI Copilot"}
+                        </button>
+                    </form>
+
+                    {knowledgeError && (
+                        <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" role="alert">
+                            {knowledgeError}
+                        </p>
+                    )}
+
+                    {knowledgeResult && (
+                        <div className="mt-6 space-y-4">
+                            <section className="rounded-xl border border-slate-700 bg-black/40 p-5">
+                                <h3 className="font-semibold text-white">Answer</h3>
+                                <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-300">
+                                    {knowledgeResult.answer}
+                                </div>
+                            </section>
+
+                            <section className="rounded-xl border border-slate-700 p-5">
+                                <h3 className="font-semibold text-white">Retrieved sources</h3>
+                                {knowledgeResult.sources?.length ? (
+                                    <div className="mt-3 space-y-3">
+                                        {knowledgeResult.sources.map((source, index) => (
+                                            <div key={`${source.source}-${source.chunkIndex}-${index}`} className="rounded-lg bg-black/40 p-3">
+                                                <p className="text-sm font-medium text-red-300">
+                                                    {source.citation || `[Source ${index + 1}]`} · {source.title || "Untitled document"}
+                                                </p>
+                                                <p className="mt-1 break-all text-xs text-slate-400">{source.source}</p>
+                                                <p className="mt-1 text-xs text-slate-500">
+                                                    Chunk {source.chunkIndex ?? "N/A"} · Similarity score: {typeof source.score === "number" ? source.score.toFixed(3) : "N/A"}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="mt-2 text-sm text-slate-400">No sources were returned.</p>
+                                )}
+                                <p className="mt-4 text-xs leading-5 text-red-300">
+                                    AI-generated decision support. Similarity scores are not confidence percentages; verify important operational decisions against the original documents.
+                                </p>
+                            </section>
+                        </div>
+                    )}
                 </section>
             </main>
         </div>

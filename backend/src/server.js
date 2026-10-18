@@ -4,6 +4,7 @@ const cors = require("cors");
 const pool = require("./db");
 const supplierRoutes = require("./routes/supplierRoutes");
 const disruptionRoutes = require("./routes/disruptionRoutes");
+const knowledgeRoutes = require("./routes/knowledgeRoutes");
 
 const app = express();
 
@@ -12,6 +13,8 @@ app.use(express.json());
 
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/disruptions", disruptionRoutes);
+
+app.use("/api/knowledge", knowledgeRoutes);
 
 app.get("/", (req, res) => {
     res.json({
@@ -35,6 +38,7 @@ app.get("/api/db-test", async (req, res) => {
         });
     }
 });
+
 
 const PORT = process.env.PORT || 5000;
 
