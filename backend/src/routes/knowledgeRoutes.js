@@ -3,9 +3,29 @@ const express = require("express");
 const router = express.Router();
 
 const { answerQuestion } = require("../services/ragService");
-const {
-    answerDisruptionQuestion,
-} = require("../services/hybridService");
+const { answerDisruptionQuestion } = require("../services/hybridService");
+const { listIndexedDocuments } = require("../services/documentIngestionService");
+
+
+// List documents currently indexed in Qdrant.
+router.get("/documents", async (req, res) => {
+    try {
+        const documents = await listIndexedDocuments();
+
+        return res.status(200).json({
+            success: true,
+            data: documents,
+            count: documents.length,
+        });
+    } catch (error) {
+        console.error("Document listing failed:", error);
+
+        return res.status(500).json({
+            success: false,
+            error: "Unable to list indexed documents.",
+        });
+    }
+});
 
 router.post("/ask", async (req, res) => {
     try {

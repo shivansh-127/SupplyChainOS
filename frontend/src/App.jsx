@@ -33,6 +33,9 @@ function App() {
         setLoadingAI(false);
         setSelectedOrder(null);
         setOrderAnalysis(null);
+        setHybridResult(null);
+        setHybridError("");
+        setLoadingHybrid(false);
     }, [selectedId]);
 
 
@@ -50,6 +53,19 @@ function App() {
     const [knowledgeResult, setKnowledgeResult] = useState(null);
     const [loadingKnowledge, setLoadingKnowledge] = useState(false);
     const [knowledgeError, setKnowledgeError] = useState("");
+
+    // Hybrid SQL + RAG copilot state: operational facts plus relevant policy evidence.
+    const [hybridQuestion, setHybridQuestion] = useState("");
+    const [hybridResult, setHybridResult] = useState(null);
+    const [loadingHybrid, setLoadingHybrid] = useState(false);
+    const [hybridError, setHybridError] = useState("");
+
+    // Knowledge document upload state.
+    const [uploadFile, setUploadFile] = useState(null);
+    const [uploadTitle, setUploadTitle] = useState("");
+    const [uploadingDocument, setUploadingDocument] = useState(false);
+    const [uploadMessage, setUploadMessage] = useState("");
+    const [uploadError, setUploadError] = useState("");
 
     // Load all disruptions once.
     useEffect(() => {
@@ -355,6 +371,91 @@ function App() {
             );
         } finally {
             setLoadingKnowledge(false);
+        }
+    }
+
+    async function handleHybridQuestion(event) {
+        event.preventDefault();
+
+        const question = hybridQuestion.trim();
+        if (!question) {
+            setHybridError("Please enter a question.");
+            return;
+        }
+        if (!selectedId) {
+            setHybridError("Select a disruption before asking a question.");
+            return;
+        }
+
+        setLoadingHybrid(true);
+        setHybridError("");
+        setHybridResult(null);
+
+        try {
+            const response = await fetch("http://localhost:5000/api/knowledge/ask-disruption", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    question,
+                    disruptionId: Number(selectedId),
+                }),
+            });
+
+            const result = await response.json();
+            if (!response.ok || result.success === false) {
+                throw new Error(
+                    result.details || result.error || "Hybrid AI question failed."
+                );
+            }
+
+            // Support the backend's { success, data } response and a direct result object.
+            setHybridResult(result.data ?? result);
+        } catch (err) {
+            setHybridError(err.message || "Unable to query operational and policy evidence.");
+        } finally {
+            setLoadingHybrid(false);
+        }
+    }
+
+    async function handleDocumentUpload(event) {
+        event.preventDefault();
+
+        if (!uploadFile) {
+            setUploadError("Choose a PDF or TXT file first.");
+            setUploadMessage("");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("document", uploadFile);
+        if (uploadTitle.trim()) formData.append("title", uploadTitle.trim());
+
+        setUploadingDocument(true);
+        setUploadError("");
+        setUploadMessage("");
+
+        try {
+            const response = await fetch("http://localhost:5000/api/knowledge/upload", {
+                method: "POST",
+                body: formData,
+            });
+
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || result.details || "Document ingestion failed.");
+            }
+
+            const data = result.data ?? result;
+            setUploadMessage(
+                `Indexed "${data.title}" successfully. ${data.chunksIndexed ?? data.chunkCount ?? 0} chunk(s) added to the knowledge base.`
+            );
+            setUploadFile(null);
+            setUploadTitle("");
+            event.target.reset();
+        } catch (err) {
+            setUploadError(err.message || "Unable to ingest this document.");
+        } finally {
+            setUploadingDocument(false);
         }
     }
 
@@ -1176,6 +1277,93 @@ function App() {
                         <div id="ai-copilot" className="mb-6 scroll-mt-6 rounded-2xl border border-red-500/30 bg-zinc-950 p-5">
                         <h2 className="mb-3 text-xl font-bold text-white">AI Decision Copilot</h2>
                         <p className="mb-4 text-sm text-slate-400">Investigate the selected disruption using operational impact evidence.</p>
+
+                        <section className="mb-6 rounded-xl border border-white/10 bg-black/30 p-4 sm:p-5">
+                            <h3 className="text-lg font-semibold text-white">Ask the Hybrid Copilot</h3>
+                            <p className="mt-2 text-sm leading-6 text-slate-400">
+                                Combines current disruption data from the database with relevant indexed policy documents.
+                            </p>
+                            <form onSubmit={handleHybridQuestion} className="mt-4 space-y-3">
+                                <label htmlFor="hybrid-question" className="block text-sm font-medium text-slate-200">
+                                    Ask about this disruption
+                                </label>
+                                <textarea
+                                    id="hybrid-question"
+                                    value={hybridQuestion}
+                                    onChange={(event) => setHybridQuestion(event.target.value)}
+                                    placeholder="Example: Which customer orders are at risk, and what recovery actions are supported by our policies?"
+                                    rows={3}
+                                    disabled={loadingHybrid || !selectedId}
+                                    className="w-full rounded-xl border border-slate-700 bg-zinc-950 p-3 text-sm text-white placeholder:text-slate-500 focus:border-red-500 focus:outline-none disabled:opacity-60"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={loadingHybrid || !selectedId || !hybridQuestion.trim()}
+                                    className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-slate-950 transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {loadingHybrid ? "Checking operational and policy evidence..." : "Ask about selected disruption"}
+                                </button>
+                            </form>
+
+                            {hybridError && (
+                                <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" role="alert">
+                                    {hybridError}
+                                </p>
+                            )}
+
+                            {hybridResult && (
+                                <div className="mt-5 space-y-4">
+                                    <section className="rounded-xl border border-white/10 bg-zinc-950 p-4">
+                                        <h4 className="font-semibold text-white">Hybrid answer</h4>
+                                        <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-slate-300">
+                                            {hybridResult.answer || "The service returned no answer."}
+                                        </div>
+                                    </section>
+
+                                    {hybridResult.evidenceStatus && (
+                                        <section className="rounded-xl border border-white/10 p-4">
+                                            <h4 className="font-semibold text-white">Evidence status</h4>
+                                            <ul className="mt-2 space-y-1 text-sm text-slate-300">
+                                                <li>Operational data: {hybridResult.evidenceStatus.operationalDataAvailable ? "Available" : "Unavailable"}</li>
+                                                <li>Policy documents retrieved: {hybridResult.evidenceStatus.policyEvidenceFound ? "Yes" : "No"}</li>
+                                                <li>Policy evidence relevant to the question: {hybridResult.evidenceStatus.policyEvidenceRelevant === true ? "Yes" : hybridResult.evidenceStatus.policyEvidenceRelevant === false ? "No" : "Not assessed"}</li>
+                                            </ul>
+                                            {hybridResult.evidenceStatus.relevanceReason && (
+                                                <p className="mt-2 text-xs leading-5 text-slate-400">
+                                                    {hybridResult.evidenceStatus.relevanceReason}
+                                                </p>
+                                            )}
+                                        </section>
+                                    )}
+
+                                    <section className="rounded-xl border border-white/10 p-4">
+                                        <h4 className="font-semibold text-white">Policy sources used</h4>
+                                        {hybridResult.documentSources?.length ? (
+                                            <div className="mt-3 space-y-3">
+                                                {hybridResult.documentSources.map((source, index) => (
+                                                    <div key={`${source.source}-${source.chunkIndex}-${index}`} className="rounded-lg bg-black/40 p-3">
+                                                        <p className="text-sm font-medium text-red-300">
+                                                            {source.citation || `[Document ${index + 1}]`} · {source.title || "Untitled document"}
+                                                        </p>
+                                                        <p className="mt-1 break-all text-xs text-slate-400">{source.source || "Source path unavailable"}</p>
+                                                        <p className="mt-1 text-xs text-slate-500">
+                                                            Chunk {source.chunkIndex ?? "N/A"} · Similarity score: {typeof source.similarityScore === "number" ? source.similarityScore.toFixed(3) : typeof source.score === "number" ? source.score.toFixed(3) : "N/A"}
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="mt-2 text-sm text-slate-400">No relevant policy documents were used for this answer. The response should rely only on available operational facts and clearly stated limitations.</p>
+                                        )}
+                                    </section>
+
+                                    <p className="text-xs leading-5 text-red-300">
+                                        AI-generated decision support. Database figures are operational inputs; policy recommendations depend on retrieved document evidence. Verify important decisions before acting.
+                                    </p>
+                                </div>
+                            )}
+                        </section>
+
                         <button
                             onClick={handleAIInvestigation}
                             disabled={loadingAI || !selectedId}
@@ -1500,6 +1688,59 @@ function App() {
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
                         Ask questions about indexed supplier policies and procedures. Answers are generated using retrieved document evidence, with source references shown below.
                     </p>
+
+                    <section className="mt-6 rounded-xl border border-white/10 bg-black/30 p-5">
+                        <h3 className="text-lg font-semibold text-white">Add a knowledge document</h3>
+                        <p className="mt-1 text-sm leading-6 text-slate-400">
+                            Upload a PDF or TXT file to extract its text, create embeddings, and index it in Qdrant. Use documents you are authorized to share.
+                        </p>
+                        <form onSubmit={handleDocumentUpload} className="mt-4 space-y-3">
+                            <label htmlFor="document-title" className="block text-sm font-medium text-slate-200">
+                                Document title (optional)
+                            </label>
+                            <input
+                                id="document-title"
+                                type="text"
+                                value={uploadTitle}
+                                onChange={(event) => setUploadTitle(event.target.value)}
+                                placeholder="e.g. Supplier Delay Response Procedure"
+                                maxLength={160}
+                                disabled={uploadingDocument}
+                                className="w-full rounded-xl border border-slate-700 bg-black/40 p-3 text-sm text-white placeholder:text-slate-500 focus:border-red-500 focus:outline-none"
+                            />
+                            <label htmlFor="knowledge-document" className="block text-sm font-medium text-slate-200">
+                                PDF or TXT file (maximum 10 MB)
+                            </label>
+                            <input
+                                id="knowledge-document"
+                                type="file"
+                                accept=".pdf,.txt,application/pdf,text/plain"
+                                onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                                disabled={uploadingDocument}
+                                className="block w-full rounded-xl border border-slate-700 bg-black/40 p-3 text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-red-500 file:px-3 file:py-2 file:font-semibold file:text-black"
+                            />
+                            <button
+                                type="submit"
+                                disabled={uploadingDocument || !uploadFile}
+                                className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-slate-950 transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {uploadingDocument ? "Extracting and indexing..." : "Upload and index document"}
+                            </button>
+                        </form>
+                        {uploadMessage && (
+                            <p className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300" role="status">
+                                {uploadMessage}
+                            </p>
+                        )}
+                        {uploadError && (
+                            <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" role="alert">
+                                {uploadError}
+                            </p>
+                        )}
+                        <p className="mt-3 text-xs leading-5 text-amber-300">
+                            Uploaded files are indexed as evidence, not automatically verified company policy. Scanned PDFs without selectable text may require OCR, which is not included yet.
+                        </p>
+                    </section>
 
                     <form onSubmit={handleKnowledgeQuestion} className="mt-5 space-y-3">
                         <label htmlFor="knowledge-question" className="block text-sm font-medium text-slate-200">

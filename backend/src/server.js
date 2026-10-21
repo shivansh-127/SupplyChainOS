@@ -5,6 +5,7 @@ const pool = require("./db");
 const supplierRoutes = require("./routes/supplierRoutes");
 const disruptionRoutes = require("./routes/disruptionRoutes");
 const knowledgeRoutes = require("./routes/knowledgeRoutes");
+const documentUploadRoutes = require("./routes/documentUploadRoutes");
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.use("/api/suppliers", supplierRoutes);
 app.use("/api/disruptions", disruptionRoutes);
 
 app.use("/api/knowledge", knowledgeRoutes);
+app.use("/api/knowledge", documentUploadRoutes);
 
 app.get("/", (req, res) => {
     res.json({
