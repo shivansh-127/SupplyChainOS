@@ -3,6 +3,7 @@ const multer = require("multer");
 const path = require("path");
 const pdfParse = require("pdf-parse");
 const { ingestDocument } = require("../services/documentIngestionService");
+const { createHash } = require("crypto");
 
 const router = express.Router();
 
@@ -37,6 +38,20 @@ function safeOriginalName(value) {
     return path.basename(String(value || "document"))
         .replace(/[^a-zA-Z0-9._-]/g, "_")
         .slice(0, 120) || "document";
+}
+
+function createStableSource(originalName) {
+    const normalizedName = path
+        .basename(String(originalName || "document"))
+        .trim()
+        .toLowerCase();
+
+    const hash = createHash("sha256")
+        .update(normalizedName)
+        .digest("hex")
+        .slice(0, 16);
+
+    return `uploads/${hash}-${safeOriginalName(originalName)}`;
 }
 
 async function extractText(file) {
@@ -98,7 +113,7 @@ router.post("/upload", (req, res) => {
 
             // Every upload gets a unique source for now. Replacement/version management
             // will need a separate stable document ID and explicit update workflow.
-            const source = `uploads/${Date.now()}-${safeOriginalName(req.file.originalname)}`;
+            const source = createStableSource(req.file.originalname);
 
             const ingestion = await ingestDocument({ title, source, text });
 
@@ -123,7 +138,10 @@ router.post("/upload", (req, res) => {
                     chunksCreated: ingestion.chunksCreated,
                     chunksIndexed,
                     pointsStored: ingestion.pointsStored,
-                    message: `Document indexed successfully: ${chunksIndexed} chunk(s) stored in Qdrant.`,
+                    replaced: ingestion.replaced,
+                    message: ingestion.replaced
+                        ? `Document replaced successfully: ${ingestion.chunksIndexed} chunk(s) indexed.`
+                        : `Document indexed successfully: ${ingestion.chunksIndexed} chunk(s) indexed.`,
                 },
             });
         } catch (error) {

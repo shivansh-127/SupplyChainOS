@@ -447,7 +447,9 @@ function App() {
 
             const data = result.data ?? result;
             setUploadMessage(
-                `Indexed "${data.title}" successfully. ${data.chunksIndexed ?? data.chunkCount ?? 0} chunk(s) added to the knowledge base.`
+                data.replaced
+                    ? `Replaced "${data.title}" successfully. ${data.chunksIndexed} chunk(s) indexed.`
+                    : `Indexed "${data.title}" successfully. ${data.chunksIndexed} chunk(s) added to the knowledge base.`
             );
             setUploadFile(null);
             setUploadTitle("");

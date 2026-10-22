@@ -1,23 +1,9 @@
 
 const { allocateInventory } = require("./allocateInventory");
 
-function test(name, callback) {
-    try {
-        callback();
-        console.log(`PASS: ${name}`);
-    } catch (error) {
-        console.error(`FAIL: ${name}`);
-        console.error(error.message);
-        process.exitCode = 1;
-    }
-}
 
-function assertEqual(actual, expected, message) {
-    if (actual !== expected) {
-        throw new Error(
-            `${message}: expected ${expected}, received ${actual}`
-        );
-    }
+function assertEqual(actual, expected) {
+    expect(actual).toBe(expected);
 }
 
 // Test 1: Earlier order gets priority when supply is insufficient.

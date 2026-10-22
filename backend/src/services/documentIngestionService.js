@@ -114,6 +114,20 @@ async function ingestDocument({ title, source, text }) {
     // This deletes only points with this exact source. The upload route currently
     // generates a unique source for each upload, so this is not yet a replacement
     // workflow across separate uploads.
+   // Check whether this source already exists.
+    const existingDocuments = await listIndexedDocuments();
+
+    const existingDocument = existingDocuments.find(
+        (document) => document.source === normalizedSource
+    );
+
+    // Upsert first. Stable point IDs overwrite matching chunk IDs.
+    await qdrant.upsert(COLLECTION_NAME, {
+        wait: true,
+        points,
+    });
+
+    // Remove obsolete chunks if the replacement is shorter.
     await qdrant.delete(COLLECTION_NAME, {
         wait: true,
         filter: {
@@ -122,22 +136,22 @@ async function ingestDocument({ title, source, text }) {
                     key: "source",
                     match: { value: normalizedSource },
                 },
+                {
+                    key: "chunkIndex",
+                    range: { gte: chunks.length },
+                },
             ],
         },
     });
 
-    await qdrant.upsert(COLLECTION_NAME, {
-        wait: true,
-        points,
-    });
-
     return {
-        title: normalizedTitle,
-        source: normalizedSource,
-        chunksCreated: chunks.length,
-        pointsStored: points.length,
-        chunksIndexed: points.length,
-    };
+    title: normalizedTitle,
+    source: normalizedSource,
+    chunksCreated: chunks.length,
+    pointsStored: points.length,
+    chunksIndexed: points.length,
+    replaced: Boolean(existingDocument),
+};
 }
 
 async function listIndexedDocuments() {
@@ -234,4 +248,5 @@ module.exports = {
     chunkDocument,
     ingestDocument,
     listIndexedDocuments,
+    deleteIndexedDocument,
 };

@@ -4,8 +4,10 @@ const router = express.Router();
 
 const { answerQuestion } = require("../services/ragService");
 const { answerDisruptionQuestion } = require("../services/hybridService");
-const { listIndexedDocuments } = require("../services/documentIngestionService");
-
+const {
+    listIndexedDocuments,
+    deleteIndexedDocument,
+} = require("../services/documentIngestionService");
 
 // List documents currently indexed in Qdrant.
 router.get("/documents", async (req, res) => {
@@ -26,6 +28,42 @@ router.get("/documents", async (req, res) => {
         });
     }
 });
+
+router.delete("/documents", async (req, res) => {
+    try {
+        const { source } = req.body;
+
+        if (typeof source !== "string" || !source.trim()) {
+            return res.status(400).json({
+                success: false,
+                error: "A valid document source is required.",
+            });
+        }
+
+        const result = await deleteIndexedDocument(source);
+
+        if (!result.deleted) {
+            return res.status(404).json({
+                success: false,
+                error: "Document not found.",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: result,
+            message: `Document deleted. ${result.chunksDeleted} chunk(s) removed.`,
+        });
+    } catch (error) {
+        console.error("Document deletion failed:", error);
+
+        return res.status(500).json({
+            success: false,
+            error: "Unable to delete the document.",
+        });
+    }
+});
+
 
 router.post("/ask", async (req, res) => {
     try {
