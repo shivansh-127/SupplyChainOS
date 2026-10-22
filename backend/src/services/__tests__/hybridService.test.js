@@ -119,4 +119,53 @@ test("rejects irrelevant policy documents", async () => {
     expect(result.documentSources).toEqual([]);
 });
 
+test("includes relevant policy evidence and its source", async () => {
+    retrieveRelevantChunks.mockResolvedValue([
+        {
+            title: "Demo Supplier Delay Policy",
+            source: "demo/supplier-delay-policy.txt",
+            chunkIndex: 0,
+            score: 0.86,
+            text: "Notify the operations manager within 4 business hours when a critical supplier delay exceeds 5 calendar days."
+        }
+    ]);
+
+    // First Gemini call: evaluate relevance.
+    generateContent.mockResolvedValueOnce({
+        text: JSON.stringify({
+            relevant: true,
+            reason: "The policy directly addresses critical supplier delays."
+        })
+    });
+
+    // Second Gemini call: generate the final answer.
+    generateContent.mockResolvedValueOnce({
+        text: "Notify the operations manager within 4 business hours. [Document 1]"
+    });
+
+    const result = await answerDisruptionQuestion(
+        1,
+        "What should we do about a critical supplier delay?"
+    );
+
+    // Both AI stages should run.
+    expect(generateContent).toHaveBeenCalledTimes(2);
+
+    // Relevant evidence should be accepted.
+    expect(result.evidenceStatus.policyEvidenceFound).toBe(true);
+    expect(result.evidenceStatus.policyEvidenceRelevant).toBe(true);
+
+    // Its source metadata should be returned.
+    expect(result.documentSources).toHaveLength(1);
+    expect(result.documentSources[0].title)
+        .toBe("Demo Supplier Delay Policy");
+    expect(result.documentSources[0].source)
+        .toBe("demo/supplier-delay-policy.txt");
+    expect(result.documentSources[0].citation)
+        .toBe("[Document 1]");
+
+    // The final answer should be present.
+    expect(result.answer).toContain("[Document 1]");
+});
+
 });

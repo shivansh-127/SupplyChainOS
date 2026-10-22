@@ -1,3 +1,12 @@
+jest.mock("../config/qdrant", () => ({
+    delete: jest.fn(),
+    upsert: jest.fn(),
+}));
+
+jest.mock("../services/embeddingService", () => ({
+    embedText: jest.fn(),
+}));
+
 const { chunkDocument } = require("../services/documentIngestionService");
 
 describe("chunkDocument", () => {
