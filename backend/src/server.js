@@ -6,6 +6,8 @@ const supplierRoutes = require("./routes/supplierRoutes");
 const disruptionRoutes = require("./routes/disruptionRoutes");
 const knowledgeRoutes = require("./routes/knowledgeRoutes");
 const documentUploadRoutes = require("./routes/documentUploadRoutes");
+const nlSqlRoutes = require("./routes/nlSqlRoutes");
+
 
 const app = express();
 
@@ -17,6 +19,7 @@ app.use("/api/disruptions", disruptionRoutes);
 
 app.use("/api/knowledge", knowledgeRoutes);
 app.use("/api/knowledge", documentUploadRoutes);
+app.use("/api/nl-sql", nlSqlRoutes);
 
 app.get("/", (req, res) => {
     res.json({

@@ -60,6 +60,12 @@ function App() {
     const [loadingHybrid, setLoadingHybrid] = useState(false);
     const [hybridError, setHybridError] = useState("");
 
+    // Natural-language SQL assistant state.
+    const [sqlQuestion, setSqlQuestion] = useState("");
+    const [sqlResult, setSqlResult] = useState(null);
+    const [loadingSql, setLoadingSql] = useState(false);
+    const [sqlError, setSqlError] = useState("");
+
     // Knowledge document upload state.
     const [uploadFile, setUploadFile] = useState(null);
     const [uploadTitle, setUploadTitle] = useState("");
@@ -414,6 +420,44 @@ function App() {
             setHybridError(err.message || "Unable to query operational and policy evidence.");
         } finally {
             setLoadingHybrid(false);
+        }
+    }
+
+    async function handleSqlQuestion(event) {
+        event.preventDefault();
+
+        const question = sqlQuestion.trim();
+        if (!question) {
+            setSqlError("Please enter a question.");
+            return;
+        }
+
+        setLoadingSql(true);
+        setSqlError("");
+        setSqlResult(null);
+
+        try {
+            const response = await fetch("http://localhost:5000/api/nl-sql/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ question }),
+            });
+
+            const result = await response.json();
+            if (!response.ok || result.success === false) {
+                throw new Error(
+                    result.details || result.error || "The database question failed."
+                );
+            }
+
+            // The API returns { success, data }; tolerate a direct result as well.
+            setSqlResult(result.data ?? result);
+        } catch (err) {
+            setSqlError(
+                err.message || "Unable to answer this question from operational data."
+            );
+        } finally {
+            setLoadingSql(false);
         }
     }
 
@@ -1279,6 +1323,123 @@ function App() {
                         <div id="ai-copilot" className="mb-6 scroll-mt-6 rounded-2xl border border-red-500/30 bg-zinc-950 p-5">
                         <h2 className="mb-3 text-xl font-bold text-white">AI Decision Copilot</h2>
                         <p className="mb-4 text-sm text-slate-400">Investigate the selected disruption using operational impact evidence.</p>
+
+                        <section className="mb-6 rounded-xl border border-white/10 bg-black/30 p-4 sm:p-5">
+                            <h3 className="text-lg font-semibold text-white">Ask Your Operational Database</h3>
+                            <p className="mt-2 text-sm leading-6 text-slate-400">
+                                Ask a question in plain English. SupplyChainOS checks whether it can answer safely,
+                                runs a read-only database query, and presents a human-readable explanation with the returned rows.
+                                The generated SQL is available for transparency.
+                            </p>
+
+                            <form onSubmit={handleSqlQuestion} className="mt-4 space-y-3">
+                                <label htmlFor="sql-question" className="block text-sm font-medium text-slate-200">
+                                    Ask about inventory, suppliers, components, orders, or shipments
+                                </label>
+                                <textarea
+                                    id="sql-question"
+                                    value={sqlQuestion}
+                                    onChange={(event) => setSqlQuestion(event.target.value)}
+                                    placeholder="Example: Which components have stock below their reorder level?"
+                                    rows={3}
+                                    disabled={loadingSql}
+                                    className="w-full rounded-xl border border-slate-700 bg-zinc-950 p-3 text-sm text-white placeholder:text-slate-500 focus:border-red-500 focus:outline-none disabled:opacity-60"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={loadingSql || !sqlQuestion.trim()}
+                                    className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-slate-950 transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {loadingSql ? "Querying operational database..." : "Ask database"}
+                                </button>
+                            </form>
+
+                            {sqlError && (
+                                <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" role="alert">
+                                    {sqlError}
+                                </p>
+                            )}
+
+                            {sqlResult && (
+                                <div className="mt-5 space-y-4">
+                                    {sqlResult.supported === false ? (
+                                        <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                                            <h4 className="font-semibold text-amber-200">Question not supported</h4>
+                                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">
+                                                {sqlResult.message || sqlResult.explanation || "This question cannot be answered using the available operational database."}
+                                            </p>
+                                        </section>
+                                    ) : (
+                                        <>
+                                            <section className="rounded-xl border border-white/10 bg-zinc-950 p-4">
+                                                <h4 className="font-semibold text-white">Answer</h4>
+                                                <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-slate-300">
+                                                    {sqlResult.explanation || sqlResult.answer || sqlResult.message || "The query completed, but the service returned no explanation."}
+                                                </div>
+                                            </section>
+
+                                            <section className="rounded-xl border border-white/10 p-4">
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <h4 className="font-semibold text-white">Database results</h4>
+                                                    <span className="text-xs text-slate-400">
+                                                        {Array.isArray(sqlResult.rows) ? `${sqlResult.rows.length} row(s)` : "No rows returned"}
+                                                    </span>
+                                                </div>
+                                                {Array.isArray(sqlResult.rows) && sqlResult.rows.length > 0 ? (
+                                                    <div className="mt-3 overflow-x-auto">
+                                                        <table className="w-full text-left text-sm">
+                                                            <thead className="text-slate-400">
+                                                                <tr className="border-b border-white/10">
+                                                                    {Object.keys(sqlResult.rows[0]).map((column) => (
+                                                                        <th key={column} className="pb-3 pr-4 font-medium">
+                                                                            {column.replaceAll("_", " ")}
+                                                                        </th>
+                                                                    ))}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {sqlResult.rows.slice(0, 100).map((row, rowIndex) => (
+                                                                    <tr key={rowIndex} className="border-b border-white/10 last:border-0">
+                                                                        {Object.keys(sqlResult.rows[0]).map((column) => (
+                                                                            <td key={column} className="py-3 pr-4 text-slate-300">
+                                                                                {row[column] == null
+                                                                                    ? "—"
+                                                                                    : typeof row[column] === "object"
+                                                                                        ? JSON.stringify(row[column])
+                                                                                        : String(row[column])}
+                                                                            </td>
+                                                                        ))}
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                        {sqlResult.rows.length > 100 && (
+                                                            <p className="mt-2 text-xs text-slate-500">Showing the first 100 rows.</p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <p className="mt-3 text-sm text-slate-400">The query returned no matching rows.</p>
+                                                )}
+                                            </section>
+
+                                            {sqlResult.sql && (
+                                                <details className="rounded-xl border border-white/10 p-4">
+                                                    <summary className="cursor-pointer text-sm font-semibold text-slate-200">
+                                                        View generated SQL
+                                                    </summary>
+                                                    <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-black/50 p-3 text-xs leading-6 text-emerald-200">
+                                                        {sqlResult.sql}
+                                                    </pre>
+                                                </details>
+                                            )}
+                                        </>
+                                    )}
+                                    <p className="text-xs leading-5 text-slate-500">
+                                        Database answers are limited to supported questions and returned records. Review the result and SQL before making operational decisions.
+                                    </p>
+                                </div>
+                            )}
+                        </section>
 
                         <section className="mb-6 rounded-xl border border-white/10 bg-black/30 p-4 sm:p-5">
                             <h3 className="text-lg font-semibold text-white">Ask the Hybrid Copilot</h3>
