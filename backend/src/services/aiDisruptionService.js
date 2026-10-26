@@ -147,12 +147,63 @@
         throw new Error("Gemini returned data that failed validation");
     }
 
-    return {
-        disruptionId: disruption.id,
-        model: "gemini-3.5-flash-lite",
-        analysisType: "AI-generated assessment",
-        ...analysis
+
+const affectedOrders = Number(impact.summary?.affectedOrders ?? 0);
+const totalShortage = Number(impact.summary?.totalShortage ?? 0);
+const coverageDays = Number(impact.inventory?.coverageDays);
+const delayDays = Number(disruption.delay_days);
+
+console.log("[Disruption investigation diagnostic]", {
+    disruptionId: disruption.id,
+    affectedOrders,
+    totalShortage,
+    coverageDays,
+    delayDays
+});
+
+const hasConfirmedShortage =
+    affectedOrders > 0 || totalShortage > 0;
+
+const hasPotentialCoverageRisk =
+    Number.isFinite(coverageDays) &&
+    Number.isFinite(delayDays) &&
+    coverageDays < delayDays;
+
+let finalAnalysis = analysis;
+
+if (!hasConfirmedShortage) {
+    finalAnalysis = {
+        ...analysis,
+        summary: hasPotentialCoverageRisk
+            ? `No confirmed customer-order shortage is recorded. Inventory covers ${coverageDays.toFixed(2)} days against a disruption delay of ${delayDays} days, indicating potential future supply risk.`
+            : "No confirmed customer-order shortage is recorded in the supplied operational impact data.",
+
+        reasoning: hasPotentialCoverageRisk
+            ? `The calculated impact reports ${affectedOrders} affected orders and ${totalShortage} units of shortage. Current inventory coverage is ${coverageDays.toFixed(2)} days against a ${delayDays}-day disruption. This indicates potential future inventory exposure, not a confirmed customer-order shortage.`
+            : `The calculated impact reports ${affectedOrders} affected orders and ${totalShortage} units of shortage. The supplied data does not establish a current customer-order shortage.`,
+
+        keyRisks: hasPotentialCoverageRisk
+            ? [
+                `Potential future inventory gap: coverage is ${coverageDays.toFixed(2)} days versus a ${delayDays}-day disruption. This is not a confirmed customer-order shortage.`
+            ]
+            : [],
+
+        recommendedNextSteps: hasPotentialCoverageRisk
+            ? [
+                "Monitor the incoming shipment and verify its expected arrival date.",
+                "Recheck inventory coverage and customer-order allocations as operational data changes."
+            ]
+            : []
     };
+}
+
+return {
+    disruptionId: disruption.id,
+    model: "gemini-3.5-flash-lite",
+    analysisType: "AI-generated assessment",
+    ...finalAnalysis
+};
+
 }
 
 
@@ -296,14 +347,15 @@
             ) {
                 throw new Error("Gemini returned data that failed validation");
             }
+      return {
+    disruptionId: disruption.id,
+    orderId: order.id,
+    model: "gemini-3.5-flash-lite",
+    analysisType: "AI-generated order assessment",
+    ...analysis
+};
+   
 
-            return {
-                disruptionId: disruption.id,
-                orderId: order.id,
-                model: "gemini-3.5-flash-lite",
-                analysisType: "AI-generated order assessment",
-                ...analysis
-            };
         }
 
 module.exports = {

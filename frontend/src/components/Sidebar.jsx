@@ -1,107 +1,199 @@
-const navItems = [
-    { icon: "▦", label: "Control Tower", description: "Overview" },
-    { icon: "◉", label: "Disruption Workspace", description: "Impact & recovery" },
-    { icon: "⇄", label: "Suppliers", description: "Supplier options" },
-    { icon: "▤", label: "Inventory", description: "Stock coverage" },
-    { icon: "↗", label: "Shipments", description: "Inbound logistics" },
-    { icon: "✦", label: "AI Copilot", description: "Decision support" },
-    { icon: "▣", label: "Knowledge Center", description: "Policies & evidence" },
+
+import {
+  Activity,
+  AlertTriangle,
+  ArrowUpRight,
+  Boxes,
+  BrainCircuit,
+  ChevronRight,
+  ClipboardList,
+  Factory,
+  LayoutDashboard,
+  LibraryBig,
+  Package,
+  ShieldCheck,
+  Truck,
+} from "lucide-react";
+
+const navigationGroups = [
+  {
+    title: "WORKSPACE",
+    items: [
+      {
+        label: "Control Tower",
+        description: "Operational overview",
+        icon: LayoutDashboard,
+      },
+      {
+        label: "Disruption Workspace",
+        description: "Impact and recovery",
+        icon: AlertTriangle,
+      },
+    ],
+  },
+  {
+    title: "SUPPLY NETWORK",
+    items: [
+      {
+        label: "Suppliers",
+        description: "Supplier alternatives",
+        icon: Factory,
+      },
+      {
+        label: "Inventory",
+        description: "Stock and coverage",
+        icon: Boxes,
+      },
+      {
+        label: "Shipments",
+        description: "Inbound logistics",
+        icon: Truck,
+      },
+    ],
+  },
+  {
+    title: "INTELLIGENCE",
+    items: [
+      {
+        label: "AI Copilot",
+        description: "Ask and investigate",
+        icon: BrainCircuit,
+      },
+      {
+        label: "Knowledge Center",
+        description: "Documents and evidence",
+        icon: LibraryBig,
+      },
+    ],
+  },
 ];
 
-function Sidebar({ activeSection, onNavigate }) {
-    return (
-        <aside className="z-20 flex w-full shrink-0 flex-col border-b border-white/10 bg-[#050506] px-4 py-5 md:sticky md:top-0 md:h-screen md:w-[270px] md:overflow-y-auto md:overscroll-contain md:border-b-0 md:border-r md:border-white/[0.08] md:px-5 md:py-7">
-            <div className="mb-8 flex items-center gap-3 px-1">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-600 text-lg font-black text-white shadow-lg shadow-red-950/40">
-                    S
-                </div>
-                <div className="min-w-0">
-                    <h1 className="text-[15px] font-bold tracking-tight text-white">
-                        SupplyChainOS
-                    </h1>
-                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                        Decision intelligence
-                    </p>
-                </div>
-            </div>
+export default function Sidebar({ activeSection, onNavigate }) {
+  return (
+    <aside className="z-30 flex w-full flex-shrink-0 flex-col border-b border-slate-800 bg-[#0b1220] md:sticky md:top-0 md:h-screen md:w-[260px] md:border-b-0 md:border-r">
+      {/* Brand */}
+      <div className="flex items-center justify-between gap-3 px-5 py-5 md:px-6 md:py-7">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-sky-400 text-slate-950 shadow-lg shadow-sky-500/10">
+            <Activity size={22} strokeWidth={2.5} />
+          </div>
 
-            <div className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
-                Workspace
-            </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold tracking-tight text-white">
+              SupplyChain<span className="text-sky-400">OS</span>
+            </h1>
+            <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">
+              Decision intelligence
+            </p>
+          </div>
+        </div>
 
-            <nav
-                className="flex flex-wrap gap-1.5 md:flex-col"
-                aria-label="Main navigation"
-            >
-                {navItems.map((item) => {
-                    const active = activeSection === item.label;
+        <span className="hidden rounded-md border border-slate-700 px-2 py-1 text-[10px] font-semibold text-slate-400 md:inline-flex">
+          BETA
+        </span>
+      </div>
 
-                    return (
-                        <button
-                            key={item.label}
-                            type="button"
-                            onClick={() => onNavigate(item.label)}
-                            aria-current={active ? "page" : undefined}
-                            className={`group flex min-w-0 items-center gap-3 rounded-xl border px-3 py-3 text-left transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/70 md:w-full ${
-                                active
-                                    ? "border-red-500/30 bg-red-500/10 text-white shadow-sm shadow-red-950/20"
-                                    : "border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/[0.04] hover:text-white"
-                            }`}
-                        >
-                            <span
-                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg transition ${
-                                    active
-                                        ? "bg-red-600 text-white"
-                                        : "bg-white/[0.04] text-zinc-400 group-hover:bg-white/[0.08] group-hover:text-white"
-                                }`}
-                                aria-hidden="true"
-                            >
-                                {item.icon}
-                            </span>
+      {/* Workspace label */}
+      <div className="hidden px-6 pb-3 md:block">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+          Main menu
+        </p>
+      </div>
 
-                            <span className="min-w-0 flex-1">
-                                <span className="block text-xs font-semibold sm:text-sm">
-                                    {item.label}
-                                </span>
-                                <span
-                                    className={`mt-1 hidden text-[11px] md:block ${
-                                        active
-                                            ? "text-red-200/70"
-                                            : "text-zinc-600 group-hover:text-zinc-400"
-                                    }`}
-                                >
-                                    {item.description}
-                                </span>
-                            </span>
+      {/* Navigation */}
+      <nav
+        aria-label="Main navigation"
+        className="flex gap-2 overflow-x-auto px-3 pb-3 md:flex-1 md:flex-col md:gap-6 md:overflow-x-hidden md:overflow-y-auto md:px-4 md:pb-5"
+      >
+        {navigationGroups.map((group) => (
+          <div key={group.title} className="flex-shrink-0 md:w-full">
+            <p className="mb-2 hidden px-3 text-[10px] font-semibold tracking-[0.16em] text-slate-600 md:block">
+              {group.title}
+            </p>
 
-                            {active && (
-                                <span className="hidden h-1.5 w-1.5 shrink-0 rounded-full bg-red-500 md:block" />
-                            )}
-                        </button>
-                    );
-                })}
-            </nav>
+            <div className="flex gap-2 md:flex-col md:gap-1">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = activeSection === item.label;
 
-            <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:mt-auto md:min-h-fit">
-                <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-white">
-                        System status
-                    </p>
-                    <span className="relative flex h-2 w-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/40" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => onNavigate(item.label)}
+                    aria-current={active ? "page" : undefined}
+                    className={[
+                      "group flex min-h-10 flex-shrink-0 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all duration-150",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400",
+                      "md:w-full",
+                      active
+                        ? "border-sky-400/20 bg-sky-400/10 text-sky-300"
+                        : "border-transparent text-slate-400 hover:border-slate-800 hover:bg-slate-900 hover:text-slate-100",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={[
+                        "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors",
+                        active
+                          ? "bg-sky-400/15 text-sky-300"
+                          : "bg-slate-900 text-slate-500 group-hover:text-slate-200",
+                      ].join(" ")}
+                    >
+                      <Icon size={17} strokeWidth={1.8} />
                     </span>
-                </div>
-                <p className="mt-2 text-[11px] leading-5 text-zinc-500">
-                    Local API indicator only. It does not verify supplier or live shipment availability.
-                </p>
-                <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3 text-[10px] font-medium uppercase tracking-wider text-zinc-600">
-                    <span>Environment</span>
-                    <span className="text-red-400">Demo</span>
-                </div>
-            </div>
-        </aside>
-    );
-}
 
-export default Sidebar;
+                    <span className="min-w-0 flex-1">
+                      <span className="block whitespace-nowrap text-xs font-medium md:text-sm">
+                        {item.label}
+                      </span>
+                      <span className="mt-0.5 hidden text-[11px] text-slate-500 md:block">
+                        {item.description}
+                      </span>
+                    </span>
+
+                    <ChevronRight
+                      size={15}
+                      className={[
+                        "hidden flex-shrink-0 md:block",
+                        active
+                          ? "text-sky-300"
+                          : "text-slate-700 opacity-0 transition group-hover:opacity-100",
+                      ].join(" ")}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* Bottom status */}
+      <div className="hidden p-4 md:block">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-30" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+
+            <span className="text-xs font-medium text-slate-200">
+              Operations workspace
+            </span>
+          </div>
+
+          <p className="mt-2 text-[11px] leading-5 text-slate-500">
+            Review live records and verify recovery actions before making
+            operational commitments.
+          </p>
+
+          <div className="mt-3 flex items-center gap-1.5 text-[10px] text-slate-600">
+            <ShieldCheck size={13} />
+            <span>Decision support system</span>
+            <ArrowUpRight size={12} className="ml-auto" />
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
