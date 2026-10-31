@@ -1,19 +1,52 @@
 
 function allocateInventory(orders, totalInventory, shipments = []) {
+    const inventory = Number(totalInventory);
+
+    if (!Number.isFinite(inventory) || inventory < 0) {
+        throw new Error("Invalid total inventory");
+    }
+
+    if (!Array.isArray(orders) || !Array.isArray(shipments)) {
+        throw new Error("Orders and shipments must be arrays");
+    }
+
     const incomingSupply = shipments
+        .map((shipment, index) => {
+            const quantity = Number(shipment.quantity);
+
+            if (!Number.isFinite(quantity) || quantity < 0) {
+                throw new Error(
+                    `Invalid quantity for shipment at index ${index}`
+                );
+            }
+
+            let expectedDate = null;
+
+            if (shipment.expected_date != null) {
+                expectedDate = new Date(shipment.expected_date);
+
+                if (Number.isNaN(expectedDate.getTime())) {
+                    throw new Error(
+                        `Invalid expected date for shipment at index ${index}`
+                    );
+                }
+            }
+
+            return {
+                quantity,
+                expectedDate,
+                atRisk: Boolean(shipment.at_risk),
+                added: false
+            };
+        })
         .filter(
             shipment =>
-                !shipment.at_risk &&
-                shipment.expected_date != null
+                !shipment.atRisk &&
+                shipment.expectedDate !== null
         )
-        .map(shipment => ({
-            quantity: Number(shipment.quantity),
-            expectedDate: new Date(shipment.expected_date),
-            added: false
-        }))
         .sort((a, b) => a.expectedDate - b.expectedDate);
 
-    let remainingSupply = Number(totalInventory);
+    let remainingSupply = inventory;
 
     const sortedOrders = [...orders].sort(
         (a, b) =>
@@ -25,6 +58,10 @@ function allocateInventory(orders, totalInventory, shipments = []) {
 
     for (const order of sortedOrders) {
         const deliveryDate = new Date(order.delivery_date);
+
+        if (Number.isNaN(deliveryDate.getTime())) {
+            throw new Error(`Invalid delivery date for order ${order.id}`);
+        }
 
         for (const shipment of incomingSupply) {
             if (

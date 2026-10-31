@@ -121,6 +121,144 @@ async function getDisruptionImpact(req, res) {
         }
     }
 
+    
+async function createDisruptionController(req, res) {
+    try {
+        const {
+            supplier_id,
+            component_id,
+            type,
+            severity,
+            description,
+            reason,
+            delay_days,
+            status = "ACTIVE",
+            expected_resolution_date
+        } = req.body;
+
+        const supplierId = Number(supplier_id);
+        const componentId = Number(component_id);
+        const severityValue = Number(severity);
+        const delayDays = Number(delay_days);
+
+        if (
+            !Number.isSafeInteger(supplierId) ||
+            supplierId <= 0 ||
+            !Number.isSafeInteger(componentId) ||
+            componentId <= 0
+        ) {
+            return res.status(400).json({
+                error: "Valid supplier_id and component_id are required"
+            });
+        }
+
+        if (
+            typeof type !== "string" ||
+            !type.trim() ||
+            typeof description !== "string" ||
+            !description.trim()
+        ) {
+            return res.status(400).json({
+                error: "Disruption type and description are required"
+            });
+        }
+
+        if (
+            !Number.isFinite(severityValue) ||
+            severityValue < 1 ||
+            severityValue > 10 ||
+            !Number.isInteger(delayDays) ||
+            delayDays < 0
+        ) {
+            return res.status(400).json({
+                error: "Severity must be between 1 and 10 and delay_days must be a non-negative integer"
+            });
+        }
+
+        const allowedStatuses = ["ACTIVE", "RESOLVED", "MONITORING"];
+
+        if (!allowedStatuses.includes(status)) {
+            return res.status(400).json({
+                error: "Invalid disruption status"
+            });
+        }
+
+        if (
+            expected_resolution_date != null &&
+            (
+                typeof expected_resolution_date !== "string" ||
+                !/^\d{4}-\d{2}-\d{2}$/.test(expected_resolution_date) ||
+                Number.isNaN(Date.parse(expected_resolution_date)) ||
+                new Date(`${expected_resolution_date}T00:00:00.000Z`)
+                    .toISOString()
+                    .slice(0, 10) !== expected_resolution_date
+            )
+        ) {
+            return res.status(400).json({
+                error: "expected_resolution_date must be a valid YYYY-MM-DD date"
+            });
+        }
+
+        const references = await pool.query(
+            `SELECT
+                EXISTS(SELECT 1 FROM suppliers WHERE id = $1) AS supplier_exists,
+                EXISTS(SELECT 1 FROM components WHERE id = $2) AS component_exists`,
+            [supplierId, componentId]
+        );
+
+        if (!references.rows[0].supplier_exists) {
+            return res.status(400).json({
+                error: "Supplier not found"
+            });
+        }
+
+        if (!references.rows[0].component_exists) {
+            return res.status(400).json({
+                error: "Component not found"
+            });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO disruptions (
+                supplier_id,
+                component_id,
+                type,
+                severity,
+                description,
+                reason,
+                delay_days,
+                status,
+                expected_resolution_date
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *`,
+            [
+                supplierId,
+                componentId,
+                type.trim(),
+                severityValue,
+                description.trim(),
+                typeof reason === "string" ? reason.trim() : null,
+                delayDays,
+                status,
+                expected_resolution_date ?? null
+            ]
+        );
+
+        return res.status(201).json({
+            success: true,
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Create disruption failed:", error);
+
+        return res.status(500).json({
+            error: "Unable to create disruption"
+        });
+    }
+}
+
+
    
     async function investigateOrderController(req, res) {
         try {
@@ -185,9 +323,51 @@ async function getDisruptionImpact(req, res) {
         }
     }
 
+    async function deleteDisruptionController(req, res) {
+    const id = Number(req.params.id);
+
+    if (!Number.isSafeInteger(id) || id <= 0) {
+        return res.status(400).json({
+            success: false,
+            message: "Invalid disruption ID"
+        });
+    }
+
+    try {
+        const result = await pool.query(
+            `DELETE FROM disruptions
+             WHERE id = $1
+             RETURNING id`,
+            [id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Disruption not found"
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: `Disruption #${id} deleted successfully`,
+            deletedId: id
+        });
+    } catch (error) {
+        console.error("Delete disruption error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to delete disruption"
+        });
+    }
+}
+
     module.exports = {
-        getDisruptionImpact,
-        getMitigationOptions,
-        investigateDisruptionController,
-        investigateOrderController
-    };
+    getDisruptionImpact,
+    getMitigationOptions,
+    investigateDisruptionController,
+    investigateOrderController,
+    createDisruptionController,
+    deleteDisruptionController
+};

@@ -625,8 +625,69 @@ function App() {
   const [uploadMessage, setUploadMessage] = useState("");
   const [uploadError, setUploadError] = useState("");
 
+  const [showCreateForm, setShowCreateForm] = useState(false);
+const [creatingDisruption, setCreatingDisruption] = useState(false);
+const [createDisruptionError, setCreateDisruptionError] = useState("");
+const [createDisruptionMessage, setCreateDisruptionMessage] = useState("");
+
+const [supplierOptions, setSupplierOptions] = useState([]);
+const [componentOptions, setComponentOptions] = useState([]);
+const [loadingOptions, setLoadingOptions] = useState(false);
+const [deletingDisruptionId, setDeletingDisruptionId] = useState(null);
+const [disruptionToDelete, setDisruptionToDelete] = useState(null);
+
+const [newDisruption, setNewDisruption] = useState({
+  supplier_id: "1",
+  component_id: "1",
+  type: "SUPPLY_DELAY",
+  severity: "5",
+  description: "",
+  reason: "",
+  delay_days: "3",
+  status: "ACTIVE",
+  expected_resolution_date: "",
+});
+
   const orderRequestId = useRef(0);
   const aiRequestId = useRef(0);
+
+  useEffect(() => {
+  let cancelled = false;
+
+  async function loadDisruptionOptions() {
+    setLoadingOptions(true);
+
+    try {
+      const response = await fetch(`${API}/options`);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.message || "Failed to load supplier and component options."
+        );
+      }
+
+      if (!cancelled) {
+        setSupplierOptions(result.suppliers || []);
+        setComponentOptions(result.components || []);
+      }
+    } catch (err) {
+      if (!cancelled) {
+        setCreateDisruptionError(err.message);
+      }
+    } finally {
+      if (!cancelled) {
+        setLoadingOptions(false);
+      }
+    }
+  }
+
+  loadDisruptionOptions();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -750,6 +811,150 @@ function App() {
     if (!pages[section]) return;
     setActiveSection(section);
   }
+  
+  async function handleCreateDisruption(event) {
+    event.preventDefault();
+
+    setCreateDisruptionError("");
+    setCreateDisruptionMessage("");
+
+    const payload = {
+      ...newDisruption,
+      supplier_id: Number(newDisruption.supplier_id),
+      component_id: Number(newDisruption.component_id),
+      severity: Number(newDisruption.severity),
+      delay_days: Number(newDisruption.delay_days),
+    };
+
+    if (
+      !Number.isInteger(payload.supplier_id) ||
+      payload.supplier_id <= 0 ||
+      !Number.isInteger(payload.component_id) ||
+      payload.component_id <= 0
+    ) {
+      setCreateDisruptionError("Enter valid supplier and component IDs.");
+      return;
+    }
+
+    if (
+      !payload.description.trim() ||
+      !payload.reason.trim() ||
+      !Number.isFinite(payload.severity) ||
+      payload.severity < 1 ||
+      payload.severity > 10 ||
+      !Number.isInteger(payload.delay_days) ||
+      payload.delay_days < 0 ||
+      !payload.expected_resolution_date
+    ) {
+      setCreateDisruptionError(
+        "Complete all required fields with valid values."
+      );
+      return;
+    }
+
+    setCreatingDisruption(true);
+
+    try {
+      const response = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.success === false) {
+        throw new Error(
+          result.details ||
+            result.error ||
+            result.message ||
+            "Failed to create disruption."
+        );
+      }
+
+      const created = result.data ?? result;
+
+      const listResponse = await fetch(API);
+      const listResult = await listResponse.json();
+
+      if (!listResponse.ok) {
+        throw new Error(
+          "Disruption was created, but the list could not be refreshed. Refresh the page."
+        );
+      }
+
+      const records = Array.isArray(listResult)
+        ? listResult
+        : listResult.data ?? [];
+
+      setIncidents(records);
+      setSelectedId(String(created.id));
+      setCreateDisruptionMessage(
+        `Disruption #${created.id} created successfully.`
+      );
+      setNewDisruption((current) => ({
+        ...current,
+        description: "",
+        reason: "",
+      }));
+      setShowCreateForm(false);
+    } catch (err) {
+      setCreateDisruptionError(err.message);
+    } finally {
+      setCreatingDisruption(false);
+    }
+  }
+
+  async function handleDeleteDisruption(id) {
+  setDeletingDisruptionId(id);
+  setCreateDisruptionError("");
+  setCreateDisruptionMessage("");
+
+  try {
+    const response = await fetch(`${API}/${id}`, {
+      method: "DELETE",
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || result.success === false) {
+      throw new Error(
+        result.details || result.error || result.message ||
+        "Failed to delete disruption."
+      );
+    }
+
+    const listResponse = await fetch(API);
+    const listResult = await listResponse.json();
+
+    if (!listResponse.ok) {
+      throw new Error(
+        "Deleted successfully, but the list could not refresh. Please refresh the page."
+      );
+    }
+
+    const records = Array.isArray(listResult)
+      ? listResult
+      : listResult.data ?? [];
+
+    setIncidents(records);
+
+    if (String(selectedId) === String(id)) {
+      setSelectedId(records.length > 0 ? String(records[0].id) : "");
+    }
+
+    setDisruptionToDelete(null);
+
+    setCreateDisruptionMessage(
+      result.message || `Disruption #${id} deleted successfully.`
+    );
+  } catch (err) {
+    setCreateDisruptionError(err.message);
+  } finally {
+    setDeletingDisruptionId(null);
+  }
+}
+
 
   async function handleAIInvestigation() {
     if (!selectedId) return;
@@ -991,38 +1196,44 @@ function App() {
   const page = pages[activeSection] ?? pages["Control Tower"];
 
   function renderDisruptionSelector() {
-    return (
-      <Panel
-        title="Select a disruption"
-        subtitle="Impact, mitigation, and investigations are scoped to the selected record."
-      >
-        {incidents.length === 0 ? (
-          <EmptyState>No disruptions were returned by the backend.</EmptyState>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {incidents.map((incident) => {
-              const active = String(incident.id) === String(selectedId);
+  return (
+    <Panel
+      title="Select a disruption"
+      subtitle="Impact, mitigation, and investigations are scoped to the selected record."
+    >
+      {incidents.length === 0 ? (
+        <EmptyState>No disruptions were returned by the backend.</EmptyState>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {incidents.map((incident) => {
+            const active = String(incident.id) === String(selectedId);
+            const deleting = deletingDisruptionId === incident.id;
 
-              return (
+            return (
+              <div
+                key={incident.id}
+                className={`rounded-xl border p-4 transition ${
+                  active
+                    ? "border-sky-400/40 bg-sky-400/[0.07]"
+                    : "border-slate-800 bg-slate-950/50"
+                }`}
+              >
                 <button
-                  key={incident.id}
                   type="button"
                   onClick={() => setSelectedId(String(incident.id))}
-                  className={`rounded-xl border p-4 text-left transition ${
-                    active
-                      ? "border-sky-400/40 bg-sky-400/[0.07]"
-                      : "border-slate-800 bg-slate-950/50 hover:border-slate-700"
-                  }`}
+                  className="w-full text-left"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-100">
                         {incident.supplier ?? "Unknown supplier"}
                       </p>
+
                       <p className="mt-1 text-xs text-slate-500">
                         {incident.component ?? "Component unavailable"}
                       </p>
                     </div>
+
                     <span
                       className={`shrink-0 rounded-lg border px-2 py-1 text-[10px] font-semibold ${severityClass(
                         incident.severity
@@ -1042,24 +1253,254 @@ function App() {
                     <span className="text-[11px] text-slate-500">
                       {incident.status ?? "Status unavailable"}
                     </span>
+
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-300">
                       {active ? "Selected" : "View impact"}
                       <ArrowRight size={13} />
                     </span>
                   </div>
                 </button>
-              );
-            })}
-          </div>
+
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    variant="danger"
+                    onClick={() => setDisruptionToDelete(incident)}
+                    disabled={deletingDisruptionId !== null}
+                  >
+                    {deleting ? (
+                      <LoaderCircle size={14} className="animate-spin" />
+                    ) : (
+                      <XCircle size={14} />
+                    )}
+                    {deleting ? "Deleting..." : "Delete disruption"}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+  
+function renderDisruptionWorkspace() {
+  return (
+    <div className="space-y-5">
+      <Panel
+        title="Create a new disruption"
+        subtitle="Register a new supplier or component disruption in the operational database."
+        action={
+          <button
+            type="button"
+            onClick={() => {
+              setShowCreateForm((value) => !value);
+              setCreateDisruptionError("");
+            }}
+            className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-300 hover:bg-sky-500/20"
+          >
+            {showCreateForm ? "Close form" : "+ Add disruption"}
+          </button>
+        }
+      >
+        <SuccessMessage>{createDisruptionMessage}</SuccessMessage>
+        <ErrorMessage>{createDisruptionError}</ErrorMessage>
+
+        {showCreateForm && (
+          <form
+            onSubmit={handleCreateDisruption}
+            className="mt-4 space-y-4"
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field label="Supplier">
+                <select
+                  className={inputClass}
+                  value={newDisruption.supplier_id}
+                  onChange={(event) =>
+                    setNewDisruption((current) => ({
+                      ...current,
+                      supplier_id: event.target.value,
+                    }))
+                  }
+                  required
+                  disabled={loadingOptions}
+                >
+                  <option value="">Select supplier</option>
+                  {supplierOptions.map((supplier) => (
+                    <option key={supplier.id} value={String(supplier.id)}>
+                      {supplier.name} — {supplier.location}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Affected component">
+                <select
+                  className={inputClass}
+                  value={newDisruption.component_id}
+                  onChange={(event) =>
+                    setNewDisruption((current) => ({
+                      ...current,
+                      component_id: event.target.value,
+                    }))
+                  }
+                  required
+                  disabled={loadingOptions}
+                >
+                  <option value="">Select component</option>
+                  {componentOptions.map((component) => (
+                    <option key={component.id} value={String(component.id)}>
+                      {component.name} — {component.category}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Disruption type">
+                <select
+                  className={inputClass}
+                  value={newDisruption.type}
+                  onChange={(event) =>
+                    setNewDisruption((current) => ({
+                      ...current,
+                      type: event.target.value,
+                    }))
+                  }
+                  required
+                >
+                  <option value="SUPPLY_DELAY">Supply delay</option>
+                  <option value="TRANSPORT_DISRUPTION">Transport disruption</option>
+                  <option value="QUALITY_ISSUE">Quality issue</option>
+                  <option value="PRODUCTION_OUTAGE">Production outage</option>
+                </select>
+              </Field>
+
+              <Field label="Severity (1–10)">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min="1"
+                  max="10"
+                  step="0.1"
+                  value={newDisruption.severity}
+                  onChange={(event) =>
+                    setNewDisruption((current) => ({
+                      ...current,
+                      severity: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </Field>
+
+              <Field label="Delay (days)">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={newDisruption.delay_days}
+                  onChange={(event) =>
+                    setNewDisruption((current) => ({
+                      ...current,
+                      delay_days: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </Field>
+
+              <Field label="Expected resolution date">
+                <input
+                  className={inputClass}
+                  type="date"
+                  value={newDisruption.expected_resolution_date}
+                  onChange={(event) =>
+                    setNewDisruption((current) => ({
+                      ...current,
+                      expected_resolution_date: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </Field>
+
+              <Field label="Status">
+                <select
+                  className={inputClass}
+                  value={newDisruption.status}
+                  onChange={(event) =>
+                    setNewDisruption((current) => ({
+                      ...current,
+                      status: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="MONITORING">Monitoring</option>
+                  <option value="RESOLVED">Resolved</option>
+                </select>
+              </Field>
+            </div>
+
+            <Field label="Description">
+              <textarea
+                className={`${inputClass} min-h-20 resize-y`}
+                value={newDisruption.description}
+                onChange={(event) =>
+                  setNewDisruption((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+                placeholder="Describe what happened..."
+                required
+              />
+            </Field>
+
+            <Field label="Reason">
+              <textarea
+                className={`${inputClass} min-h-20 resize-y`}
+                value={newDisruption.reason}
+                onChange={(event) =>
+                  setNewDisruption((current) => ({
+                    ...current,
+                    reason: event.target.value,
+                  }))
+                }
+                placeholder="Explain the cause of the disruption..."
+                required
+              />
+            </Field>
+
+            {loadingOptions && (
+              <p className="text-xs text-slate-400">
+                Loading suppliers and components...
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <Button
+                type="submit"
+                disabled={
+                  creatingDisruption ||
+                  loadingOptions ||
+                  supplierOptions.length === 0 ||
+                  componentOptions.length === 0
+                }
+              >
+                {creatingDisruption
+                  ? "Creating..."
+                  : "Create disruption"}
+              </Button>
+            </div>
+          </form>
         )}
       </Panel>
-    );
-  }
 
-  function renderDisruptionWorkspace() {
-    return (
-      <div className="space-y-5">
-        {renderDisruptionSelector()}
+      {renderDisruptionSelector()}
+
 
         {error && <ErrorMessage>{error}</ErrorMessage>}
         {loadingImpact && <LoadingState label="Loading disruption impact..." />}
@@ -1189,9 +1630,17 @@ function App() {
                         {selectedOrder.product} · shortage {formatNumber(selectedOrder.shortage)} units
                       </p>
                     </div>
-                    <Button onClick={handleOrderInvestigation} disabled={loadingOrderAnalysis}>
-                      {loadingOrderAnalysis && <LoaderCircle size={15} className="animate-spin" />}
-                      Run order investigation
+                    <Button
+                        onClick={handleOrderInvestigation}
+                        disabled={
+                          loadingOrderAnalysis ||
+                          Number(selectedOrder.shortage) <= 0
+                        }
+                        >
+                        {loadingOrderAnalysis && (
+                          <LoaderCircle size={15} className="animate-spin" />
+                        )}
+                        Run order investigation
                     </Button>
                   </div>
 
@@ -1334,9 +1783,69 @@ function App() {
             </Panel>
           </>
         )}
-      </div>
-    );
-  }
+           {disruptionToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10">
+                <AlertTriangle className="text-red-400" size={22} />
+              </div>
+
+              <div>
+                <h3 className="text-base font-semibold text-white">
+                  Delete disruption?
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-400">
+                  Are you sure you want to delete disruption{" "}
+                  <span className="font-semibold text-white">
+                    #{disruptionToDelete.id}
+                  </span>{" "}
+                  associated with{" "}
+                  <span className="font-semibold text-slate-200">
+                    {disruptionToDelete.supplier}
+                  </span>
+                  ?
+                </p>
+
+                <p className="mt-2 text-xs text-red-400">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-7 flex justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => setDisruptionToDelete(null)}
+                disabled={deletingDisruptionId !== null}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                variant="danger"
+                onClick={() =>
+                  handleDeleteDisruption(disruptionToDelete.id)
+                }
+                disabled={deletingDisruptionId !== null}
+              >
+                {deletingDisruptionId !== null ? (
+                  <>
+                    <LoaderCircle size={15} className="animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Yes, delete"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
   function renderInventory() {
     return (

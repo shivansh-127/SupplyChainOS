@@ -114,3 +114,103 @@ test("excludes shipments marked at risk", () => {
 });
 
 
+// Test 5: A shipment arriving on the delivery date is eligible.
+test("counts a shipment arriving on the delivery date", () => {
+    const result = allocateInventory(
+        [
+            {
+                id: 1,
+                product: "NovaPhone X",
+                quantity: 3000,
+                quantity_required: 1,
+                delivery_date: "2026-10-12"
+            }
+        ],
+        2000,
+        [
+            {
+                quantity: 1000,
+                expected_date: "2026-10-12",
+                at_risk: false
+            }
+        ]
+    );
+
+    expect(result.orders[0].allocated).toBe(3000);
+    expect(result.orders[0].shortage).toBe(0);
+});
+
+// Test 6: Invalid order quantities must be rejected.
+test("rejects negative order quantities", () => {
+    expect(() =>
+        allocateInventory(
+            [
+                {
+                    id: 1,
+                    product: "NovaPhone X",
+                    quantity: -100,
+                    quantity_required: 1,
+                    delivery_date: "2026-10-12"
+                }
+            ],
+            2000
+        )
+    ).toThrow("Invalid quantities for order 1");
+});
+
+// Test 7: Zero component requirement must be rejected.
+test("rejects a zero component requirement", () => {
+    expect(() =>
+        allocateInventory(
+            [
+                {
+                    id: 1,
+                    product: "NovaPhone X",
+                    quantity: 100,
+                    quantity_required: 0,
+                    delivery_date: "2026-10-12"
+                }
+            ],
+            2000
+        )
+    ).toThrow("Invalid quantities for order 1");
+});
+
+
+test("rejects negative total inventory", () => {
+    expect(() =>
+        allocateInventory([], -100)
+    ).toThrow("Invalid total inventory");
+});
+
+test("rejects invalid shipment quantity", () => {
+    expect(() =>
+        allocateInventory(
+            [],
+            2000,
+            [
+                {
+                    quantity: -500,
+                    expected_date: "2026-10-12",
+                    at_risk: false
+                }
+            ]
+        )
+    ).toThrow("Invalid quantity for shipment at index 0");
+});
+
+test("rejects invalid shipment date", () => {
+    expect(() =>
+        allocateInventory(
+            [],
+            2000,
+            [
+                {
+                    quantity: 500,
+                    expected_date: "not-a-date",
+                    at_risk: false
+                }
+            ]
+        )
+    ).toThrow("Invalid expected date for shipment at index 0");
+});

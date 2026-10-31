@@ -6,7 +6,9 @@ const {
     getDisruptionImpact,
     getMitigationOptions,
     investigateDisruptionController,
-    investigateOrderController
+    investigateOrderController,
+    createDisruptionController,
+    deleteDisruptionController
 } = require("../controllers/disruptionController");
 
 const router = express.Router();
@@ -49,9 +51,39 @@ router.get("/", async (req, res) => {
     }
 });
 
+router.post("/", createDisruptionController);
+
+router.get("/options", async (req, res) => {
+    try {
+        const [suppliersResult, componentsResult] = await Promise.all([
+            pool.query(
+                `SELECT id, name, location, risk_score
+                 FROM suppliers
+                 ORDER BY name`
+            ),
+            pool.query(
+                `SELECT id, name, category, criticality
+                 FROM components
+                 ORDER BY name`
+            )
+        ]);
+
+        res.json({
+            suppliers: suppliersResult.rows,
+            components: componentsResult.rows
+        });
+    } catch (error) {
+        console.error("Failed to fetch disruption options:", error);
+        res.status(500).json({
+            message: "Failed to fetch suppliers and components"
+        });
+    }
+});
+
 router.get("/:id/impact", getDisruptionImpact);
 router.get("/:id/mitigation", getMitigationOptions);
 router.post("/:id/investigate", investigateDisruptionController);
+router.delete("/:id", deleteDisruptionController);
 router.post(
     "/:id/orders/:orderId/investigate",
     investigateOrderController
